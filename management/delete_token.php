@@ -9,7 +9,7 @@
 error_reporting(0);
 
 # Достаём обязательный параметр username
-$TokenStartSymbols = @$_REQUEST['token_start'] or die(json_encode(['status' => 'error', 'code' => 2, 'details' => ['description' => 'No token start specified']]));
+$TokenStartSymbols = @$_REQUEST['token_start'] or '';
 $UserName = @$_REQUEST['username'] or die(json_encode(['status' => 'error', 'code' => 3, 'details' => ['description' => 'No username specified']]));
 
 # Ищем те токены, которые будут удалены, чтобы потом их вернуть
