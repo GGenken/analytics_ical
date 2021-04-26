@@ -26,7 +26,7 @@ $Query = "SELECT username, refreshed FROM cal WHERE token = '".$Token."'";
 $Info = @mysqli_query($connectionDB, $Query) or die(json_encode(['status' => 'error', 'code' => 6, 'details' => ['description' => 'DB error, failed to grab username']]));
 
 # Перевод запроса в массив
-$Info = @mysqli_fetch_array($Info) or die(json_encode(['status' => 'error', 'code' => 7, 'details' => ['description' => 'Failed to decode service DB response']]));
+$Info = @mysqli_fetch_array($Info) or die(json_encode(['status' => 'error', 'code' => 7, 'details' => ['description' => 'Failed to decode service DB response, check whether token exists']]));
 
 # Достаём время последнего обновления
 $LastRefresh = $Info['refreshed'] or die(json_encode(['status' => 'error', 'code' => 8, 'details' => ['description' => 'Grabbing timestamp error']]));

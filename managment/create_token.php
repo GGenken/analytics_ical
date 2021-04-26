@@ -1,9 +1,9 @@
-<?php include "db.php"; # Подключение БД
+<?php include "../db.php"; # Подключение БД
 
-/********************************************************
- * Данный класс должне быть в одной папке с             *
- * create_calendar.php и index.php, недоступен для сети *
- ********************************************************/
+/******************************
+ * Данный скрипт должне быть  *
+ * доступен только для ЛК     *
+ ******************************/
 
 # Подавление ошибок, т. к. их обработчики нормально работают
 error_reporting(0);
@@ -19,6 +19,9 @@ function generate_string($chars = 'abcdefghilkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRST
     return $result;
 }
 $Token = generate_string();
+
+# Проверяем, сколько токенов у пользователя; Если 4 и более, то отказываем в создании нового токена
+if (mysqli_fetch_assoc(mysqli_query($connectionDB, "SELECT COUNT(token) FROM cal WHERE username='".$UserName."'"))["COUNT(token)"] >= 4) { die(json_encode(['status' => 'error', 'code' => 20, 'details' => ['description' => 'Bad quantity of tokens']])); };
 
 # Формируем запрос на создание пары токен/имя пользователя
 # [нет защиты от SQL-инъекций, т. к. запрос только с ЛК]
