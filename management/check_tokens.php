@@ -9,7 +9,7 @@
 error_reporting(0);
 
 # Достаём обязательный параметр username
-$UserName = @$_REQUEST['username'] or die(json_encode(['status' => 'error', 'code' => 2, 'details' => ['description' => 'No username specified']]));
+$UserName = @(string)$_REQUEST['username'] or die(json_encode(['status' => 'error', 'code' => 2, 'details' => ['description' => 'No username specified']]));
 
 # Формируем запрос на создание пары токен/имя пользователя/описание устройства использующего токен
 # Сам запрос: SELECT description, token, refreshed FROM cal WHERE username=FROM_BASE64('MjAyNGdlbmtlbi5nZg==')

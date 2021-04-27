@@ -18,7 +18,7 @@ $Token = @(string)$_REQUEST['token'] or die(json_encode(['status' => 'error', 'c
 # Формирование запроса на поиск пользователя по токену
 # Сам запрос: SELECT username, refreshed FROM cal WHERE token=FROM_BASE64('MTIzNDU2Nzg5MTIzNDU2Nw==')
 $Query = "SELECT username, refreshed FROM cal WHERE token=FROM_BASE64('".base64_encode($Token)."')";
-echo $Query;/*
+echo $Query;
 
 # Отправка  запроса
 $Info = @mysqli_query($connectionDB, $Query) or die(json_encode(['status' => 'error', 'code' => 6, 'details' => ['description' => 'DB error, failed to grab username']]));
