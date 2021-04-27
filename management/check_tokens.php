@@ -1,7 +1,7 @@
 <?php include "../db.php"; # Подключение БД
 
 /******************************
- * Данный скрипт должне быть  *
+ * Данный скрипт должен быть  *
  * доступен только для ЛК     *
  ******************************/
 
@@ -11,10 +11,10 @@ error_reporting(0);
 # Достаём обязательный параметр username
 $UserName = @$_REQUEST['username'] or die(json_encode(['status' => 'error', 'code' => 2, 'details' => ['description' => 'No username specified']]));
 
-# Формируем запрос на создание пары токен/имя пользователя/описание устройства испольующего токен
-# [нет защиты от SQL-инъекций, т. к. запрос только с ЛК]
-# Сам запрос: SELECT description, token, refreshed  FROM cal WHERE username='2024genken.gf'
-$Query = @"SELECT description, token, refreshed  FROM cal WHERE username='".$UserName."' GROUP BY refreshed" or die(json_encode(['status' => 'error', 'code' => 3, 'details' => ['description' => 'Creating query error, check whether username is an str object']]));
+# Формируем запрос на создание пары токен/имя пользователя/описание устройства использующего токен
+# Сам запрос: SELECT description, token, refreshed FROM cal WHERE username=FROM_BASE64('MjAyNGdlbmtlbi5nZg==')
+$Query = @"SELECT description, token, refreshed  FROM cal WHERE username=FROM_BASE64('".base64_encode($UserName)."') GROUP BY refreshed" or die(json_encode(['status' => 'error', 'code' => 3, 'details' => ['description' => 'Creating query error, check whether username is an str object']]));
+echo $Query;
 
 # Отправляем запрос
 $response = mysqli_query($connectionDB, $Query);

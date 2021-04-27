@@ -13,14 +13,12 @@ header('Content-type: text/calendar');
 error_reporting(0);
 
 # Достаём токен
-$Token = @$_REQUEST['token'] or die(json_encode(['status' => 'error', 'code' => 4, 'details' => ['description' => 'No token specified']]));
-
-# Проверка на правильность токена, + защита от SQL-инъекций (из тех символов, что мы используем, нельзя инжектить)
-$permitted_chars = str_split('abcdefghilkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789');
-foreach (str_split($Token) as $char) { if (!(in_array($char, $permitted_chars))) { die(['status' => 'refused', 'code' => 5, 'details' => ['description' => 'Bad token']]); } }
+$Token = @(string)$_REQUEST['token'] or die(json_encode(['status' => 'error', 'code' => 4, 'details' => ['description' => 'No token specified']]));
 
 # Формирование запроса на поиск пользователя по токену
-$Query = "SELECT username, refreshed FROM cal WHERE token = '".$Token."'";
+# Сам запрос: SELECT username, refreshed FROM cal WHERE token=FROM_BASE64('MTIzNDU2Nzg5MTIzNDU2Nw==')
+$Query = "SELECT username, refreshed FROM cal WHERE token=FROM_BASE64('".base64_encode($Token)."')";
+echo $Query;/*
 
 # Отправка  запроса
 $Info = @mysqli_query($connectionDB, $Query) or die(json_encode(['status' => 'error', 'code' => 6, 'details' => ['description' => 'DB error, failed to grab username']]));
@@ -38,7 +36,7 @@ date_default_timezone_set('Europe/Moscow');
 $TimeDifference = strtotime(date('Y-m-d H:i:s')) - strtotime($LastRefresh) or die(json_encode(['status' => 'error', 'code' => 9, 'details' => ['description' => 'Converting timestamp error']]));
 
 # Если прошло меньше пяти минут с момента последнего обновления, то отменяем запрос, снимая нагрузку с ЛК
-//if ($TimeDifference < 300) { header("HTTP/1.1 304 Not Modified"); die(); }
+if ($TimeDifference < 300) { header("HTTP/1.1 304 Not Modified"); die(); }
 
 # Достаём имя пользователя
 $UserName = $Info['username'] or die(json_encode(['status' => 'error', 'code' => 10, 'details' => ['description' => 'Grabbing username error']]));
@@ -126,8 +124,9 @@ echo('END:VCALENDAR');
 header($http_response_code = 200);
 
 # Формирование запроса о том, что клиент в это время запросил календарь, чтобы
-# клиент только немного грузил сервис, и чтобы лишний раз не грузить ЛК
-$Query = "UPDATE cal SET refreshed = '".date('Y-m-d H:i:s')."' WHERE token = '".$Token."'";
+# клиент только немного грузил сервис, и чтобы лишний раз не обращаться к ЛК
+# Сам запрос: UPDATE cal SET refreshed = '2021-04-27 14:26:19' WHERE token=FROM_BASE64('MTIzNDU2Nzg5MTIzNDU2Nw==')
+$Query = "UPDATE cal SET refreshed = '".date('Y-m-d H:i:s')."' WHERE token=FROM_BASE64('".base64_encode($Token)."')";
 
 # Отправка запроса
 mysqli_query($connectionDB, $Query);
