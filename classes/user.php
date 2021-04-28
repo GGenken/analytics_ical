@@ -17,10 +17,10 @@ class Standard {
                                 $offset_to = '+0030',
                                 $st_name = 'MSK',
                                 $start = '19700101T000000') {
-        $this -> offset_from = $offset_from;
-        $this -> offset_to = $offset_to;
-        $this -> st_name = $st_name;
-        $this -> start = $start;
+        $this->offset_from = $offset_from;
+        $this->offset_to = $offset_to;
+        $this->st_name = $st_name;
+        $this->start = $start;
     }
 
     public function out() {
@@ -47,9 +47,9 @@ class Timezone extends Standard {
                                 $offset_to = '+0030',
                                 $name = 'MSK',
                                 $start = '19700101T000000') {
-        $this -> tzid = $tzid;
-        $this -> tzurl = $tzurl;
-        $this -> x_lic_location = $x_lic_location;
+        $this->tzid = $tzid;
+        $this->tzurl = $tzurl;
+        $this->x_lic_location = $x_lic_location;
         parent::__construct($offset_from, $offset_to, $name, $start);
     }
 
@@ -60,7 +60,7 @@ class Timezone extends Standard {
             'TZURL:'.$this->tzurl,
             'X-LIC-LOCATION:'.$this->x_lic_location,
         ];
-        array_push($lines, parent::out());
+        array_merge($lines, parent::out());
         $lines[] = 'END:VTIMEZONE';
         return $lines;
     }
@@ -74,9 +74,9 @@ class Alarm {
     public function __construct($action = 'DISPLAY',
                                 $alarm_description = '',
                                 $trigger = 2) {
-        $this -> action = $action;
-        $this -> alarm_description = $alarm_description;
-        $this -> trigger = (string)$trigger;
+        $this->action = $action;
+        $this->alarm_description = $alarm_description;
+        $this->trigger = (string)$trigger;
     }
 
     public function out() {
@@ -108,13 +108,13 @@ class Event extends Alarm {
                                 $action = 'DISPLAY',
                                 $alarm_description = '',
                                 $trigger = 2) {
-        $this -> summary = $summary;
-        $this -> dtstart = $dtstart;
-        $this -> dtend = $dtend;
-        $this -> description = $description;
-        $this -> url = $url;
-        $this -> location = $location;
-        $this -> tzid = $tzid;
+        $this->summary = $summary;
+        $this->dtstart = $dtstart;
+        $this->dtend = $dtend;
+        $this->description = $description;
+        $this->url = $url;
+        $this->location = $location;
+        $this->tzid = $tzid;
         parent::__construct($action, $alarm_description, $trigger);
     }
 
@@ -129,7 +129,7 @@ class Event extends Alarm {
             'DTEND;TZID='.$this->tzid.':'.$this->dtend,
             'SUMMARY:'.$this->summary
         ];
-        array_push($lines, parent::out());
+        array_merge($lines, parent::out());
         return $lines;
     }
 }
@@ -142,9 +142,9 @@ class Calendar extends Timezone {
     private $calscale;
     private $refresh_interval;
 
-    private $events;
+    public $events; // TODO: protected
 
-    public function __construct($events,
+    public function __construct(
     							$name = 'Школьное расписание',
                                 $calscale = 'GREGORIAN',
                                 $refresh_interval = 10,
@@ -155,7 +155,6 @@ class Calendar extends Timezone {
                                 $offset_to = '+0030',
                                 $st_name = 'MSK',
                                 $start = '19700101T000000') {
-    	$this->events = $events;
         $this->created = date('Ymd').'T'.date('His');
         $this->name = $name;
         $this->calscale = $calscale;
@@ -175,10 +174,21 @@ class Calendar extends Timezone {
             'CALSCALE:'.$this->calscale,
             'REFRESH-INTERVAL;VALUE=DURATION:P'.$this->refresh_interval.'M'
         ];
-        array_push($lines, parent::out());
-        foreach ($this->events as &$event) { array_push($lines, $event.out()); }
+        array_merge($lines, parent::out());
+        $this->events_setup();
+        foreach ($this->events as &$event) { array_merge($lines, $event->out()); }
         $lines[] = 'END:VCALENDAR';
+        return $lines;
     }
+
+    public function ics($die = True) {
+		//header('Content-disposition: attachment; filename=index.ics');
+		//header('Content-type: text/calendar');
+
+    	$lines = $this->out();
+    	//foreach ($lines	as &$line) { echo($line); }
+    	if ($die) { die(0); }
+	}
 }
 
 class Lesson {
@@ -222,10 +232,9 @@ class Token {
 }
 
 
-class User {
+class User extends Calendar {
     private $name = '';
     private $tokens = [];
-    private $events = [];
 
     public function __construct($data, $type = 'token') {
     	if ($type == 'token') {
@@ -271,6 +280,60 @@ class User {
     	$this->name = @$response['username'] or RAISE('Failed to find a username by token');
     	return $this->name;
 	}
+
+	public function events_setup() {
+    	# if ($this->name == '') { $this->get_username(); }
+		# $lessons = @file_get_contents('http://cal.api.student.letovo.ru/ics?username='.$this->name or RAISE('PC did not response');
+
+		$lessons = json_decode('{
+			"lessons":[
+				{
+					"group":"RUS-8-1",
+					"subject":"Русский язык",
+					"zoom":"https://letovo.zoom.us/j/96619520927",
+					"place":"209",
+					"tasks_for_lesson":"Прочитать Евгения Онегина",
+					"begin":"20210425T124000",
+					"end":"20210425T132000"
+				},
+				{
+					"group":"ENG-9-2",
+					"subject":"English language",
+					"zoom":"https://letovo.zoom.us/j/88005553535",
+					"place":"308",
+					"tasks_for_lesson":"Read The Catcher in the Rye",
+					"begin":"20210425T154000",
+					"end":"20210425T162000"
+				}
+			]
+		}', $associative = True);
+		$lesson_list = [];
+		foreach ($lessons['lessons'] as &$lesson) {
+			$lesson_list[] = @new Lesson(
+				$lesson['subject'],
+				$lesson['group'],
+				$lesson['begin'],
+				$lesson['end'],
+				$lesson['place'],
+				$lesson['zoom'],
+				$lesson['tasks_for_lesson']
+			) or RAISE('Failed to parse lessons');
+		}
+
+		foreach ($lesson_list as &$lesson_object) {
+			$this->events[] = @new Event(
+				$lesson_object->subject.', '.$lesson_object->group,
+				$lesson_object->start,
+				$lesson_object->end,
+				$lesson_object->description,
+				$lesson_object->link,
+				$lesson_object->location
+			) or RAISE('Failed to convert lessons into an iCal Format');
+		}
+		return $this->events;
+	}
 }
 
-$gleb = new User('123456789123456', $type = 'token'); var_dump($gleb->get_full());
+$Requester = @new User((string)$_REQUEST['token']) or RAISE('Bad token specified');
+
+$Requester->ics();
