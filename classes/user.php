@@ -1,4 +1,11 @@
-<?php
+<?php include "../db.php";
+
+function RAISE($msg = 'undefined') {
+	die(json_encode([
+		'status' => 'error',
+		'details' => $msg
+	]));
+}
 
 class Standard {
     private $offset_from;
@@ -130,14 +137,15 @@ class Event extends Alarm {
 class Calendar extends Timezone {
     private $version = '2.0';
     private $prodid = '-//Letovo School/SelfGovernment/Genken//Analytics iCal Timetable Maker v2.0//RU';
-    private $create;
+    private $created;
     private $name;
     private $calscale;
     private $refresh_interval;
 
-    private $events = [];
+    private $events;
 
-    public function __construct($name = 'Школьное расписание',
+    public function __construct($events,
+    							$name = 'Школьное расписание',
                                 $calscale = 'GREGORIAN',
                                 $refresh_interval = 10,
                                 $tzid = 'Europe/Moscow',
@@ -147,18 +155,122 @@ class Calendar extends Timezone {
                                 $offset_to = '+0030',
                                 $st_name = 'MSK',
                                 $start = '19700101T000000') {
-        $this->create = date('Ymd').'T'.date('His');
+    	$this->events = $events;
+        $this->created = date('Ymd').'T'.date('His');
         $this->name = $name;
         $this->calscale = $calscale;
-        $this->refresh_interval = $refresh_interval;
+        $this->refresh_interval = (string)$refresh_interval;
 
         parent::__construct($tzid, $x_lic_location, $tzurl, $offset_from, $offset_to, $st_name, $start);
     }
+
+    public function out() {
+        $lines = [
+            'BEGIN:VCALENDAR',
+            'VERSION:'.$this->version,
+            'PRODID:'.$this->prodid,
+            'CREATED:'.$this->created,
+            'X-WR-CALNAME:'.$this->name,
+            'NAME:'.$this->name,
+            'CALSCALE:'.$this->calscale,
+            'REFRESH-INTERVAL;VALUE=DURATION:P'.$this->refresh_interval.'M'
+        ];
+        array_push($lines, parent::out());
+        foreach ($this->events as &$event) { array_push($lines, $event.out()); }
+        $lines[] = 'END:VCALENDAR';
+    }
+}
+
+class Lesson {
+    public $subject;
+    public $group;
+    public $start;
+    public $end;
+    public $location;
+    public $link;
+    public $description;
+
+    public function __construct($subject,
+								$group,
+								$start,
+								$end,
+								$location,
+								$link,
+								$description) {
+    	$this->subject = $subject;
+    	$this->group = $group;
+    	$this->start = $start;
+    	$this->end = $end;
+    	$this->location = $location;
+    	$this->link = $link;
+    	$this->description = $description;
+	}
+}
+
+class Token {
+	public $token;
+	public $last_used;
+	public $description;
+
+	public function __construct($token,
+								$last_used = '',
+								$description = '') {
+		$this->token = $token;
+		$this->last_used = $last_used;
+		$this->description = $description;
+	}
 }
 
 
 class User {
-    private $name;
-    private $tokens;
-    private $events;
+    private $name = '';
+    private $tokens = [];
+    private $events = [];
+
+    public function __construct($data, $type = 'token') {
+    	if ($type == 'token') {
+    		$this->tokens[] = new Token((string)$data);
+		}
+    	elseif ($type == 'username') {
+			$this->name = (string)$data;
+		}
+	}
+
+	public function get_full() {
+		if ($this->name == '') {
+
+			$response = @mysqli_fetch_all(request(
+				"SELECT username, token, refreshed, description FROM cal WHERE username=(SELECT username FROM cal WHERE token=FROM_BASE64('".base64_encode($this->tokens[0]->token)."') LIMIT 1)"
+			), MYSQLI_ASSOC) or RAISE('Request failed (all tokens by token)');
+			$this->name = @$response[0]['username'] or RAISE('No username in response');
+		}
+		else {
+			$response = @mysqli_fetch_all(request(
+				"SELECT token, refreshed, description FROM cal WHERE username=FROM_BASE64('".base64_encode($this->name)."')"
+			), MYSQLI_ASSOC) or RAISE('Request failed (all tokens by username)');
+		}
+
+		$this->tokens = [];
+		foreach	($response as &$token) {
+			$this->tokens[] = @new Token(
+				$token['token'],
+				$last_used = $token['refreshed'],
+				$description = $token['description']
+			) or RAISE('Foreach tokens failure');
+		}
+
+		return $this->tokens;
+	}
+
+	public function get_username() {
+    	$token = @$this->tokens[0]->token or RAISE('No token specified to find the username');
+    	$response = @mysqli_fetch_assoc(request(
+    		"SELECT username, refreshed FROM cal WHERE token=FROM_BASE64('".base64_encode($token)."')"
+		)) or RAISE('Request failed (username)');
+    	$this->tokens[0]->last_used = @$response['refreshed'] or RAISE('Failed to request last refresh');
+    	$this->name = @$response['username'] or RAISE('Failed to find a username by token');
+    	return $this->name;
+	}
 }
+
+$gleb = new User('123456789123456', $type = 'token'); var_dump($gleb->get_full());
