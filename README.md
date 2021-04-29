@@ -35,13 +35,13 @@
 ```
 [
    {
-      "token":"1234*****",
+      "token":"1234************",
       "last_used":"2000-01-01 00:00:00",
       "description":"",
       "number":1
    },
    {
-      "token":"1234******",
+      "token":"1234************",
       "last_used":"2000-01-01 00:00:00",
       "description":"",
       "number":2
@@ -61,9 +61,9 @@
 ###### `management/delete_token.php?username=2024genken.gf&token_start=Rs2s`
 ```
 {
-   "token":"123456789",
+   "token":"1234567891234567",
    "last_used":"2000-01-01 00:00:00",
-   "description":"",
+   "description":"XEON-ПК",
    "number":1
 }
 ```
