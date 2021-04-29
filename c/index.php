@@ -1,4 +1,4 @@
-<?php include "classes/user.php"; # Подключение БД и класса
+<?php include '../classes/user.php'; # Подключение класса
 
 /**************************************************
  * Данный скрипт должен быть в папке,             *
@@ -6,5 +6,5 @@
  **************************************************/
 
 $Requester = @new User((string)$_REQUEST['token']) or RAISE('Bad token specified');
-
-$Requester->out();
+$Requester->get_username();
+$Requester->ics();

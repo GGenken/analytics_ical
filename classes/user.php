@@ -144,7 +144,7 @@ class Calendar extends Timezone {
     private $calscale;
     private $refresh_interval;
 
-    public $events; // TODO: protected
+    protected $events;
 
     public function __construct($name = 'Школьное расписание',
                                 $calscale = 'GREGORIAN',
@@ -222,13 +222,16 @@ class Token {
 	public $token;
 	public $last_used;
 	public $description;
+	public $number;
 
 	public function __construct($token,
 								$last_used = '',
-								$description = '') {
+								$description = '',
+								$number = 0) {
 		$this->token = $token;
 		$this->last_used = $last_used;
 		$this->description = $description;
+		$this->number = $number;
 	}
 }
 
@@ -237,41 +240,17 @@ class User extends Calendar {
     private $name = '';
     private $tokens = [];
 
-    public function __construct($data, $type = 'token') {
+    public function __construct($data, $type = 'token', $build_ical = true) {
     	if ($type == 'token') {
     		$this->tokens[] = new Token((string)$data);
 		}
     	elseif ($type == 'username') {
 			$this->name = (string)$data;
 		}
-    	parent::__construct();
+    	if ($build_ical) { parent::__construct(); }
 	}
 
-	public function get_full() {
-		if ($this->name == '') {
 
-			$response = @mysqli_fetch_all(request(
-				"SELECT username, token, refreshed, description FROM cal WHERE username=(SELECT username FROM cal WHERE token=FROM_BASE64('".base64_encode($this->tokens[0]->token)."') LIMIT 1)"
-			), MYSQLI_ASSOC) or RAISE('Request failed (all tokens by token)');
-			$this->name = @$response[0]['username'] or RAISE('No username in response');
-		}
-		else {
-			$response = @mysqli_fetch_all(request(
-				"SELECT token, refreshed, description FROM cal WHERE username=FROM_BASE64('".base64_encode($this->name)."')"
-			), MYSQLI_ASSOC) or RAISE('Request failed (all tokens by username)');
-		}
-
-		$this->tokens = [];
-		foreach	($response as &$token) {
-			$this->tokens[] = @new Token(
-				$token['token'],
-				$last_used = $token['refreshed'],
-				$description = $token['description']
-			) or RAISE('Foreach tokens failure');
-		}
-
-		return $this->tokens;
-	}
 
 	public function get_username() {
     	$token = @$this->tokens[0]->token or RAISE('No token specified to find the username');
@@ -315,9 +294,11 @@ class User extends Calendar {
 				}
 			]
 		}', $associative = True);
+
+		@$lessons['lessons'] or RAISE('No lessons found in the PC response');
 		$lesson_list = [];
-		foreach ($lessons as &$lesson) {
-			$lesson_list['lessons'] = @new Lesson(
+		foreach ($lessons['lessons'] as &$lesson) {
+			$lesson_list[] = @new Lesson(
 				$lesson['subject'],
 				$lesson['group'],
 				$lesson['begin'],
@@ -340,5 +321,83 @@ class User extends Calendar {
 			) or RAISE('Failed to convert lessons into an iCal Format');
 		}
 		return $this->events;
+	}
+
+
+
+	public function get_full() {
+		if ($this->name == '') {
+
+			$response = @mysqli_fetch_all(request(
+				"SELECT username, token, refreshed, number, description FROM cal WHERE username=(SELECT username FROM cal WHERE token=FROM_BASE64('".base64_encode($this->tokens[0]->token)."') LIMIT 1) ORDER BY number"
+			), MYSQLI_ASSOC) or RAISE('Request failed (all tokens by token)');
+			$this->name = @$response[0]['username'] or RAISE('No username in response');
+		}
+		else {
+			$response = @mysqli_fetch_all(request(
+				"SELECT token, refreshed, number, description FROM cal WHERE username=FROM_BASE64('".base64_encode($this->name)."')"
+			), MYSQLI_ASSOC) or [];
+		}
+
+		if ($response == []) { $this->tokens = []; return []; }
+
+		$this->tokens = [];
+		foreach	($response as &$token) {
+			$this->tokens[] = @new Token(
+				$token['token'],
+				$last_used = $token['refreshed'],
+				$description = $token['description'],
+				$number = (int)$token['number']
+			) or RAISE('Foreach tokens failure');
+		}
+
+		return $this->tokens;
+	}
+
+	public function create_token($description = '') {
+    	if (count($this->get_full()) < 4) {
+			function generate_string($chars = 'abcdefghilkmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', $length = 16) {
+				$chars_length = strlen($chars);
+				$result = '';
+				for($char = 0; $char < $length; $char++) { $result .= $chars[mt_rand(0, $chars_length - 1)]; }
+				return $result;
+			}
+			$Token = generate_string();
+
+			if ($description != '') { $description = "FROM_BASE64('".base64_encode($description)."')"; }
+			else { $description = 'NULL'; }
+			request("
+				INSERT INTO cal (
+								 username,
+								 token,
+								 number,
+								 description
+							)
+				SELECT
+					   FROM_BASE64('".base64_encode($this->name)."'),
+					   '".$Token."',
+					   ".(string)(count($this->tokens) + 1).",
+				       ".$description."
+			");
+
+			return $Token;
+		}
+    	else { RAISE('Already has 4 or more tokens'); }
+	}
+
+	public function delete_token($token_id) {
+    	$this->get_full();
+		request("
+    		DELETE FROM cal WHERE (username=FROM_BASE64('".base64_encode($this->name)."') AND number=".$token_id.")
+		");
+		foreach ($this->tokens as &$token) {
+			if ($token->number == $token_id) {
+				request("
+					UPDATE cal SET number=number-1 WHERE (username=FROM_BASE64('".base64_encode($this->name)."') AND number>".$token_id.")
+				");
+				return $token;
+			}
+		}
+		RAISE('Token not found');
 	}
 }
