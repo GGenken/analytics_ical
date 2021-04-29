@@ -283,9 +283,15 @@ class User extends Calendar {
     	return $this->name;
 	}
 
+	private function request_lessons() {
+		if ($this->name == '') { $this->get_username(); }
+		return @json_decode(
+			file_get_contents('http://cal.api.student.letovo.ru/ics?username='.$this->name, $associative = true)
+			) or RAISE('PC did not response or username not known by token');
+	}
+
 	public function events_setup() {
-    	# if ($this->name == '') { $this->get_username(); }
-		# $lessons = @file_get_contents('http://cal.api.student.letovo.ru/ics?username='.$this->name or RAISE('PC did not response');
+		# $lessons = $this->request_lessons();
 
 		$lessons = json_decode('{
 			"lessons":[
@@ -310,8 +316,8 @@ class User extends Calendar {
 			]
 		}', $associative = True);
 		$lesson_list = [];
-		foreach ($lessons['lessons'] as &$lesson) {
-			$lesson_list[] = @new Lesson(
+		foreach ($lessons as &$lesson) {
+			$lesson_list['lessons'] = @new Lesson(
 				$lesson['subject'],
 				$lesson['group'],
 				$lesson['begin'],
