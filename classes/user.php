@@ -98,7 +98,8 @@ class Event extends Alarm {
     private $dtend;
     private $summary;
 
-    public function __construct($summary = 'NOT_GIVEN',
+    public function __construct($uid,
+    							$summary = 'NOT_GIVEN',
                                 $dtstart = '20200101T000000',
                                 $dtend = '20200101T000000',
                                 $description = '',
@@ -108,6 +109,7 @@ class Event extends Alarm {
                                 $action = 'DISPLAY',
                                 $alarm_description = '',
                                 $trigger = 2) {
+    	$this->uid = $uid;
         $this->summary = $summary;
         $this->dtstart = $dtstart;
         $this->dtend = $dtend;
@@ -144,8 +146,7 @@ class Calendar extends Timezone {
 
     public $events; // TODO: protected
 
-    public function __construct(
-    							$name = 'Школьное расписание',
+    public function __construct($name = 'Школьное расписание',
                                 $calscale = 'GREGORIAN',
                                 $refresh_interval = 10,
                                 $tzid = 'Europe/Moscow',
@@ -176,17 +177,17 @@ class Calendar extends Timezone {
         ];
         array_merge($lines, parent::out());
         $this->events_setup();
-        foreach ($this->events as &$event) { array_merge($lines, $event->out()); }
+        foreach ($this->events as &$event) { $lines = array_merge($lines, $event->out()); }
         $lines[] = 'END:VCALENDAR';
         return $lines;
     }
 
     public function ics($die = True) {
-		//header('Content-disposition: attachment; filename=index.ics');
-		//header('Content-type: text/calendar');
+		header('Content-disposition: attachment; filename=index.ics');
+		header('Content-type: text/calendar');
 
     	$lines = $this->out();
-    	//foreach ($lines	as &$line) { echo($line); }
+    	foreach ($lines	as &$line) { echo($line); echo(PHP_EOL);}
     	if ($die) { die(0); }
 	}
 }
@@ -243,6 +244,7 @@ class User extends Calendar {
     	elseif ($type == 'username') {
 			$this->name = (string)$data;
 		}
+    	parent::__construct();
 	}
 
 	public function get_full() {
@@ -322,6 +324,7 @@ class User extends Calendar {
 
 		foreach ($lesson_list as &$lesson_object) {
 			$this->events[] = @new Event(
+				md5($lesson_object->subject.' '.$lesson_object->group.' '.$lesson_object->start).'-'.$this->name.'@student.letovo.ru',
 				$lesson_object->subject.', '.$lesson_object->group,
 				$lesson_object->start,
 				$lesson_object->end,
@@ -333,7 +336,3 @@ class User extends Calendar {
 		return $this->events;
 	}
 }
-
-$Requester = @new User((string)$_REQUEST['token']) or RAISE('Bad token specified');
-
-$Requester->ics();
