@@ -5,13 +5,6 @@
  * извне, но доступной для ЛК (см. .htaccess)      *
  ***************************************************/
 
-error_reporting(0); # Подавление ошибок, т. к. их обработчики нормально работают
-$connectionDB = mysqli_connect( # Подключение
-    "localhost",       # IP
-    "cal",             # User
-    "cal",          # Password
-    "cal"           # DB
-);
+# error_reporting(0); # Подавление ошибок, т. к. их обработчики нормально работают
 
-# Если есть ошибки с подключением к БД, завершаем выполнение скрипта
-if (mysqli_connect_errno()) { echo(json_encode(['status' => 'error', 'code' => 1, 'details' => ['db_error_code' => mysqli_connect_errno(), 'description' => mysqli_connect_error()]])); die(1); } // Проверка подключения
+function request($Query) { return mysqli_query(mysqli_connect("localhost", "cal", "cal", "cal"), $Query); }
