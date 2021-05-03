@@ -6,11 +6,12 @@
  ******************************/
 
 $Target = @new User(
-	(string)$_REQUEST['username'],
-	$type = 'username',
+	(string)$_REQUEST['analytics_token'],
+	$connection,
+	$type = 'analytics_token',
 	$build_ical = false) or RAISE('No username specified');
 
-$TokenID = (int)$_REQUEST['token_id'] or RAISE('Bad TokenID');
-if ($TokenID > 4 or $TokenID < 1) { RAISE('TokenID out of possible'); }
+$TokenID = (int)$_REQUEST['token_id'];
+if ($TokenID > 3 or $TokenID < 0) { RAISE('TokenID out of possible'); }
 
-echo json_encode($Target->delete_token($TokenID));
+echo json_encode(['status' => 'success', 'deleted_token' => $Target->delete_token($TokenID)]);
