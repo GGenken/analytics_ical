@@ -1,4 +1,4 @@
-<?php include "../classes/user.php"; # Подключение БД
+<?php include "../classes/user.php";
 
 /******************************
  * Данный скрипт должен быть  *
@@ -6,9 +6,10 @@
  ******************************/
 
 $Target = @new User(
-	(string)$_REQUEST['username'],
-	$type = 'username',
-	$build_ical = false) or RAISE('No username specified');
+	(string)$_REQUEST['analytics_token'],
+	$connection,
+	$type = 'analytics_token',
+	$build_ical = false) or RAISE('No analytics token specified');
 
 $Description = @(string)$_REQUEST['description'] or '';
 

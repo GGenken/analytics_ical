@@ -6,5 +6,4 @@
  ***************************************************/
 
 # error_reporting(0); # Подавление ошибок, т. к. их обработчики нормально работают
-
-function request($Query) { return mysqli_query(mysqli_connect("localhost", "cal", "cal", "cal"), $Query); }
+$connection = mysqli_connect("localhost", "cal", "cal", "cal");
