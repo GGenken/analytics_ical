@@ -11,10 +11,4 @@ $Target = @new User(
 	$type = 'analytics_token',
 	$build_ical = false) or RAISE('No analytics token specified');
 
-$Tokens = $Target->get_all_tokens();
-
-foreach ($Tokens as &$token) {
-	$token->token = @substr($token->token, 0, 4).str_repeat('*', strlen($token->token) - 4) or $token->token;
-}
-
-echo json_encode($Tokens);
+echo json_encode($Target->get_all_tokens());

@@ -7,3 +7,4 @@
 
 # error_reporting(0); # Подавление ошибок, т. к. их обработчики нормально работают
 $connection = mysqli_connect("localhost", "cal", "cal", "cal");
+mysqli_set_charset($connection, "utf8");

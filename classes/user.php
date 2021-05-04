@@ -183,8 +183,8 @@ class Calendar extends Timezone {
     }
 
     public function ics($die = True) {
-		//header('Content-disposition: attachment; filename=index.ics');
-		//header('Content-type: text/calendar');
+		header('Content-disposition: attachment; filename=index.ics');
+		header('Content-type: text/calendar; charset=utf-8');
 
     	$lines = $this->out();
     	foreach ($lines	as &$line) { echo($line); echo(PHP_EOL);}
@@ -218,32 +218,19 @@ class Lesson {
 	}
 }
 
-class Token {
-	public $token;
-	public $last_used;
-	public $description;
-
-	public function __construct($token,
-								$last_used = '',
-								$description = '') {
-		$this->token = $token;
-		$this->last_used = $last_used;
-		$this->description = $description;
-	}
-}
-
-
 class User extends Calendar {
     private $name = '';
     private $tokens = [];
     private $analytics_token = '';
+    private $token_used = '';
 
     public $handler;
 
     public function __construct($data, $handler,  $type = 'token', $build_ical = true) {
     	$this->handler = $handler;
     	if ($type == 'token') {
-    		$this->tokens[] = new Token((string)$data);
+    		$this->tokens = [$data => []];
+    		$this->token_used = $data;
 		}
     	elseif ($type == 'analytics_token') {
 			$this->analytics_token = (string)$data;
@@ -254,20 +241,27 @@ class User extends Calendar {
 
 
 	public function get_analytics_token() {
-		$token = $this->tokens[0]->token or RAISE('Token not found');
+		$token = array_keys($this->tokens)[0] or RAISE('Token not found');
 
-    	$response = mysqli_query($this->handler, "
-			SELECT token
-			FROM analytics_tokens
-			WHERE username = (
-				SELECT username
+		$response = mysqli_fetch_assoc(mysqli_query($this->handler, "
+				SELECT username, tokens
 				FROM device_tokens
 				WHERE JSON_CONTAINS(
 					JSON_KEYS(tokens),
 					JSON_ARRAY(FROM_BASE64('".base64_encode($token)."')),
 					'$'
-					)
 				)
+				LIMIT 1
+		"));
+
+		$this->name = @$response['username'] or RAISE('Failed to parse username');
+
+		$this->tokens = @json_decode($response['tokens'], $associative = true) or [];
+
+    	$response = mysqli_query($this->handler, "
+			SELECT token
+			FROM analytics_tokens
+			WHERE username = '".$this->name."'
 			LIMIT 1;
 		");
     	if (!$response) { RAISE('Failed to request an analytic token from DB'); }
@@ -277,7 +271,18 @@ class User extends Calendar {
 	}
 
 	private function request_lessons() {
+		date_default_timezone_set('Europe/Moscow');
+
     	if ($this->analytics_token == '') { $this->get_analytics_token(); }
+
+    	if (strtotime(date('Y-m-d H:i:s')) - strtotime($this->tokens[$this->token_used]['last_refreshed'])  <= 300) { header("HTTP/1.1 304 Not Modified"); die(0); }
+		$this->tokens[$this->token_used]['last_refreshed'] = date('Y-m-d H:i:s');
+
+    	mysqli_query($this->handler, "
+    		UPDATE device_tokens
+    		SET tokens = '".json_encode($this->tokens)."'
+			WHERE username = '".$this->name."'
+    	");
 
 		$response = mysqli_query($this->handler, "
 			SELECT json, time
@@ -292,8 +297,6 @@ class User extends Calendar {
 
     	$response = mysqli_fetch_assoc($response) or RAISE('Failed to parse cache');
 
-		date_default_timezone_set('Europe/Moscow');
-
     	if ((strtotime(date('Y-m-d H:i:s')) - strtotime($response['time'])) <= 600) {
 			return json_decode($response['json'], $associative = true);
 		}
@@ -307,8 +310,8 @@ class User extends Calendar {
 						"zoom":"https://letovo.zoom.us/j/96619520927",
 						"place":"209",
 						"tasks_for_lesson":"Прочитать Евгения Онегина",
-						"begin":"20210425T124000",
-						"end":"20210425T132000"
+						"begin":"20210504T124000",
+						"end":"20210504T132000"
 					},
 					{
 						"group":"ENG-9-2",
@@ -316,24 +319,23 @@ class User extends Calendar {
 						"zoom":"https://letovo.zoom.us/j/88005553535",
 						"place":"308",
 						"tasks_for_lesson":"Read The Catcher in the Rye",
-						"begin":"20210425T154000",
-						"end":"20210425T162000"
+						"begin":"20210504T154000",
+						"end":"20210504T162000"
 					}
 				]
 			}';
 
-			echo "
+			mysqli_query($this->handler, "
 				UPDATE calendar_cache
 				SET time = '".date('Y-m-d H:i:s')."',
-				json = '".$timetable."'
+				json = '".json_encode(json_decode($timetable))."'
 				WHERE student = (
 				SELECT username
 					FROM analytics_tokens
 					WHERE token = FROM_BASE64('".base64_encode($this->analytics_token)."')
 					LIMIT 1
 				)
-			";
-			// var_dump($this->handler);
+			");
 
 			return json_decode($timetable, $associative = true);
 		}
@@ -383,16 +385,8 @@ class User extends Calendar {
 			)
 		");
 
-    	$tokens = @json_decode(mysqli_fetch_assoc($response)['tokens'], $associative = true) or [];
+    	$this->tokens = @json_decode(mysqli_fetch_assoc($response)['tokens'], $associative = true) or [];
 
-    	$this->tokens = [];
-    	foreach (array_keys($tokens) as &$token) {
-    		$this->tokens[] = @new Token(
-    			$token,
-				$tokens[$token]['last_refreshed'],
-				$tokens[$token]['description']
-			) or RAISE('Failed to create a token object');
-		}
     	return $this->tokens;
 	}
 
@@ -513,15 +507,7 @@ class User extends Calendar {
 		if ($response['status'] == 'INDEX_NOT_FOUND') { RAISE('Such token ID does not exist for this user'); }
 		elseif ($response['status'] == 'USERNAME_NOT_FOUND') { RAISE('User not found, check analytics token'); }
 
-		$tokens = json_decode($response['tokens'], $associative = true);
-		$this->tokens = [];
-		foreach (array_keys($tokens) as &$token) {
-			$this->tokens[] = @new Token(
-				$token,
-				$tokens[$token]['last_refreshed'],
-				$tokens[$token]['description']
-			) or 'ERROR';
-		}
+		$this->tokens = json_decode($response['tokens'], $associative = true);
 
 		return $response['status'];
 	}
