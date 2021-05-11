@@ -7,6 +7,7 @@
 
 $Requester = @new User((string)$_REQUEST['token'],
 	$connection,
-	$type = 'token') or RAISE('Bad token specified');
+	$type = 'token'
+) or RAISE('Bad token specified');
 
 $Requester->ics();

@@ -11,7 +11,7 @@ $Target = @new User(
 	$type = 'analytics_token',
 	$build_ical = false) or RAISE('No username specified');
 
-$TokenID = (int)$_REQUEST['token_id'];
+$TokenID = (string)$_REQUEST['token'];
 if ($TokenID > 3 or $TokenID < 0) { RAISE('TokenID out of possible'); }
 
 echo json_encode(['status' => 'success', 'deleted_token' => $Target->delete_token($TokenID)]);

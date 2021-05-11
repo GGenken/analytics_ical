@@ -219,8 +219,10 @@ class Lesson {
 }
 
 class User extends Calendar {
-    private $name = '';
     private $tokens = [];
+    private $token_descriptions = [];
+    private $last_usages = [];
+
     private $analytics_token = '';
     private $token_used = '';
 
@@ -229,8 +231,7 @@ class User extends Calendar {
     public function __construct($data, $handler,  $type = 'token', $build_ical = true) {
     	$this->handler = $handler;
     	if ($type == 'token') {
-    		$this->tokens = [$data => []];
-    		$this->token_used = $data;
+    		$this->token_used = (string)$data;
 		}
     	elseif ($type == 'analytics_token') {
 			$this->analytics_token = (string)$data;
@@ -241,64 +242,38 @@ class User extends Calendar {
 
 
 	public function get_analytics_token() {
-		$token = array_keys($this->tokens)[0] or RAISE('Token not found');
+    	if (!$this->analytics_token == '') { return $this->analytics_token; }
 
 		$response = mysqli_fetch_assoc(mysqli_query($this->handler, "
-				SELECT username, tokens
+				SELECT analytics_token, last_used
 				FROM device_tokens
-				WHERE JSON_CONTAINS(
-					JSON_KEYS(tokens),
-					JSON_ARRAY(FROM_BASE64('".base64_encode($token)."')),
-					'$'
-				)
+				WHERE device_token = FROM_BASE64('".base64_encode($this->token_used)."')
 				LIMIT 1
 		"));
 
-		$this->name = @$response['username'] or RAISE('Failed to parse username');
+		date_default_timezone_set('Europe/Moscow');
+		if (strtotime(date('Y-m-d H:i:s')) - strtotime($response['last_used']) <= 300) { header("HTTP/1.1 304 Not Modified"); die(0); }
 
-		$this->tokens = @json_decode($response['tokens'], $associative = true) or [];
+		$this->analytics_token = @$response['analytics_token'] or RAISE('Failed to parse Analytics Token');
 
-    	$response = mysqli_query($this->handler, "
-			SELECT token
-			FROM analytics_tokens
-			WHERE username = '".$this->name."'
-			LIMIT 1;
-		");
-    	if (!$response) { RAISE('Failed to request an analytic token from DB'); }
-
-    	$this->analytics_token = @mysqli_fetch_assoc($response)['token'] or RAISE('Failed to find a token in Analytics DB');
     	return $this->analytics_token;
 	}
 
 	private function request_lessons() {
 		date_default_timezone_set('Europe/Moscow');
 
-    	if ($this->analytics_token == '') { $this->get_analytics_token(); }
-
-    	if (strtotime(date('Y-m-d H:i:s')) - strtotime($this->tokens[$this->token_used]['last_refreshed'])  <= 300) { header("HTTP/1.1 304 Not Modified"); die(0); }
-		$this->tokens[$this->token_used]['last_refreshed'] = date('Y-m-d H:i:s');
-
-    	mysqli_query($this->handler, "
-    		UPDATE device_tokens
-    		SET tokens = '".json_encode($this->tokens)."'
-			WHERE username = '".$this->name."'
-    	");
+    	$this->get_analytics_token();
 
 		$response = mysqli_query($this->handler, "
-			SELECT json, time
-			FROM calendar_cache
-			WHERE student = (
-				SELECT username
-				FROM analytics_tokens
-				WHERE token = FROM_BASE64('".base64_encode($this->analytics_token)."')
-				LIMIT 1
-			)
+			SELECT cache_timestamp, lessons_cache
+			FROM analytics_data
+			WHERE analytics_token = ".$this->get_analytics_token()."
 		");
 
     	$response = mysqli_fetch_assoc($response) or RAISE('Failed to parse cache');
 
-    	if ((strtotime(date('Y-m-d H:i:s')) - strtotime($response['time'])) <= 600) {
-			return json_decode($response['json'], $associative = true);
+    	if (((strtotime(date('Y-m-d H:i:s')) - strtotime($response['cache_timestamp'])) <= 600) and ($response['lessons_cache'] != null)) {
+			$timetable = json_decode($response['lessons_cache'], $associative = true);
 		}
     	else {
     		# Получение расписания из Аналитики
@@ -326,19 +301,22 @@ class User extends Calendar {
 			}';
 
 			mysqli_query($this->handler, "
-				UPDATE calendar_cache
-				SET time = '".date('Y-m-d H:i:s')."',
-				json = '".json_encode(json_decode($timetable))."'
-				WHERE student = (
-				SELECT username
-					FROM analytics_tokens
-					WHERE token = FROM_BASE64('".base64_encode($this->analytics_token)."')
-					LIMIT 1
-				)
+				UPDATE analytics_data
+				SET cache_timestamp = '".date('Y-m-d H:i:s')."',
+				lessons_cache = FROM_BASE64('".base64_encode(json_encode(json_decode($timetable)))."')
+				WHERE analytics_token = '".$this->get_analytics_token()."'
 			");
 
-			return json_decode($timetable, $associative = true);
+			$timetable = json_decode($timetable, $associative = true);
 		}
+
+    	$response = mysqli_query($this->handler, "
+    		UPDATE device_tokens
+    		SET last_used = '".date('Y-m-d H:i:s')."'
+    		WHERE device_token = FROM_BASE64('".base64_encode($this->token_used)."')
+    	");
+
+    	return $timetable;
 	}
 
 	public function events_setup() {
@@ -374,18 +352,30 @@ class User extends Calendar {
 
 
 
-	public function get_all_tokens() {
+	public function get_all_tokens($json = false) {
     	$response = mysqli_query($this->handler, "
-    		SELECT tokens
+    		SELECT device_token, description, last_used
 			FROM device_tokens
-			WHERE username = (
-				SELECT username
-				FROM analytics_tokens
-				WHERE token = FROM_BASE64('".base64_encode($this->analytics_token)."')
-			)
+			WHERE analytics_token = FROM_BASE64('".base64_encode($this->get_analytics_token())."')
 		");
 
-    	$this->tokens = @json_decode(mysqli_fetch_assoc($response)['tokens'], $associative = true) or [];
+    	$response = mysqli_fetch_all($response);
+    	if ($response == []) { $this->tokens = []; return $this->tokens; }
+
+    	$this->tokens = [];
+    	foreach ($response as $token) {
+    		$this->tokens[] = @$token[0];
+    		$this->token_descriptions[] = @$token[1];
+    		$this->last_usages[] = @$token[2];
+		}
+
+    	if ($json) {
+    		return [
+    			'tokens' => $this->tokens,
+				'descriptions' => $this->token_descriptions,
+				'usages' => $this->last_usages
+			];
+		}
 
     	return $this->tokens;
 	}
@@ -404,25 +394,17 @@ class User extends Calendar {
 
 		if (count($this->get_all_tokens()) < 4) {
 			$result = mysqli_query($this->handler, "
-				UPDATE device_tokens
-				SET tokens = JSON_INSERT(
-					tokens,
-					'$.".$Token."',
-					JSON_INSERT(
-						'{}',
-						'$.last_refreshed',
-						'2020-01-01 00:00:00',
-						'$.description',
-						".$description."
-					)
+				INSERT INTO device_tokens
+				(
+				 analytics_token,
+				 device_token,
+				 description
 				)
-				WHERE username = (
-					SELECT username
-					FROM analytics_tokens
-					WHERE token = FROM_BASE64('".base64_encode($this->analytics_token)."')
-					LIMIT 1
+				values(
+				 '".$this->get_analytics_token()."',
+				 '".$Token."',
+				 ".$description."
 				)
-				AND JSON_LENGTH(tokens) < 4;
 			");
 
 			if (count($this->tokens) != count($this->get_all_tokens())) { return $Token; }
@@ -433,82 +415,22 @@ class User extends Calendar {
 		return $Token;
 	}
 
-	public function delete_token($token_id) {
-		$Queries =  [];
-		$Queries[] = "
-			SET @personal_token = FROM_BASE64('" . base64_encode($this->analytics_token) . "');
-		";
+	public function delete_token($token) {
+    	if (count($this->get_all_tokens()) == 0) { RAISE('Nothing to delete'); }
+    	if (!in_array($token, $this->tokens)) { RAISE('Token not found'); }
 
-		$Queries[] = "
-			SET @target_token_id = '" . $token_id . "';
-		";
-		$Queries[] = "
-			SET @found_username = (
-				SELECT username
-				FROM analytics_tokens
-				WHERE token = @personal_token
-				LIMIT 1
-			);
-		";
-		$Queries[] = "
-			SET @tokens_list = (
-				SELECT tokens
-				FROM device_tokens
-				WHERE username = @found_username
-			);
-			";
+    	$response = mysqli_query($this->handler, "
+    		DELETE FROM device_tokens
+			WHERE (
+			    analytics_token = '".$this->analytics_token."'
+			) AND (
+			    device_token = FROM_BASE64('".base64_encode($token)."')
+			)
+    	");
 
-		$Queries[] = "
-			SET @target_token = (
-				SELECT JSON_UNQUOTE(JSON_EXTRACT(
-					JSON_KEYS(
-						JSON_EXTRACT(@tokens_list, '$')
-					),
-					CONCAT('$[', @target_token_id, ']')
-				))
-			);
-			";
+    	if (count($this->tokens) == count($this->get_all_tokens())) { RAISE('Count of tokens is the same'); }
 
-		$Queries[] = "
-			SET @updated_tokens_list = REMOVE_TOKEN(@tokens_list, @target_token);
-		";
-
-		$Queries[] = "
-			SET @removed = (JSON_LENGTH(@updated_tokens_list) = JSON_LENGTH(@tokens_list)) XOR 1;
-		";
-
-		$Queries[] = "
-			SET @removed = IF(@removed,
-				@target_token,
-				'INDEX_NOT_FOUND'
-			);
-		";
-
-		$Queries[] = "
-			SET @removed = IF(@found_username,
-				@removed,
-				'USERNAME_NOT_FOUND'
-			);
-		";
-
-		$Queries[] = "
-			UPDATE device_tokens
-			SET tokens = @updated_tokens_list
-			WHERE username = @found_username;
-		";
-
-		foreach ($Queries as &$Q) {	mysqli_query($this->handler, $Q); }
-		$Query = "
-			SELECT JSON_EXTRACT(@updated_tokens_list, '$') AS tokens, @removed AS status;
-		";
-
-		$response = mysqli_fetch_assoc(mysqli_query($this->handler, $Query));
-
-		if ($response['status'] == 'INDEX_NOT_FOUND') { RAISE('Such token ID does not exist for this user'); }
-		elseif ($response['status'] == 'USERNAME_NOT_FOUND') { RAISE('User not found, check analytics token'); }
-
-		$this->tokens = json_decode($response['tokens'], $associative = true);
-
-		return $response['status'];
-	}
+    	if ($response) { return $token; }
+    	else { RAISE('Failed to delete token'); }
+    }
 }

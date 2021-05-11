@@ -11,4 +11,4 @@ $Target = @new User(
 	$type = 'analytics_token',
 	$build_ical = false) or RAISE('No analytics token specified');
 
-echo json_encode($Target->get_all_tokens());
+echo json_encode($Target->get_all_tokens($json = true));
