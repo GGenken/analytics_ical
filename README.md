@@ -1,5 +1,5 @@
 # Letovo Analytics Calendar Maker [OOP]
-#### Микро-служба, позволяющая интегрировать расписание из ЛК в формат iCal, основанная на ООП
+#### Микро-служба, позволяющая интегрировать расписание из ЛК в формат iCal
 <hr>
 
 ## Алгоритм работы
@@ -21,7 +21,7 @@
 ##### `create_token.php`
 Создаёт 16-символьный токен из цифр и латинских символов разного регистра в БД и ассоциирует его с именем пользователя и описанием. На вход принимает имя пользователя __(str, до 32 символов, обязательный параметр)__ и описание для идентификации устройства, на котором будет использоваться токен __(str, до 255 символов, опциональный параметр)__.
 Возвращает JSON со сгенерированным токеном, ассоциированным в БД с заданным пользователем. В случае, если с именем пользователя ассоциировано 4 и более токенов, в операции будет отказано.
-###### `management/create_token.php?username=2024genken.gf&description=iPhone 11 Pro Max`
+###### `management/create_token.php?analytics_token=31ZWzYYMGZIkkpYo31ZWzYYMGZIkkpYo&description=Андроид
 ```
 {
    "status":"success",
@@ -30,68 +30,70 @@
 ```
 
 ##### `check_tokens.php`
-Возвращает список токенов, ассоциированных с заданным именем пользователя. Выводит описание, первые четыре символа токена в открытом виде (остальные заменены на звёздочки) и время последнего обращения по этому токену.
-###### `management/check_tokens.php?username=2024genken.gf`
+Возвращает список токенов, ассоциированных с заданным именем пользователя. Выводит описания, токены в открытом виде и время последнего обращения по этим токенам.
+###### `management/check_tokens.php?analytics_token=31ZWzYYMGZIkkpYo31ZWzYYMGZIkkpYo
 ```
-[
-   {
-      "token":"1234************",
-      "last_used":"2000-01-01 00:00:00",
-      "description":"",
-      "number":1
-   },
-   {
-      "token":"1234************",
-      "last_used":"2000-01-01 00:00:00",
-      "description":"",
-      "number":2
-   },
-   {
-      "token":"6VC3************",
-      "last_used":"2000-01-01 00:00:00",
-      "description":null,
-      "number":3
-   }
-]
+{
+   "tokens":[
+      "31ZWzYYMGZIkkpYo",
+      "5nqs9mWiX0XIPgfA",
+      "DZEc2LmYyAZs4Ayk",
+      "SD0eF6WCn73rF1aW"
+   ],
+   "descriptions":[
+      "Андроид",
+      "",
+      "",
+      ""
+   ],
+   "usages":[
+      "2021-05-12 00:46:31",
+      "2020-01-01 00:00:00",
+      "2020-01-01 00:00:00",
+      "2020-01-01 00:00:00"
+   ]
+}
 ```
 
 ##### `delete_token.php`
-Удаляет токен из БД, с заданным номером и ассоциированный с заданным именем пользователя. На вход принимает имя пользователя __(str, до 32 символов, обязательный параметр)__, и номер __(str/int, опциональный параметр)__.
-В ответ даёт всю информацию об успешно удалённом токене в открытом виде. У всех токенов, у которых номер был больше чем у удалённого, номер будет понижен на 1.
+Удаляет токен из БД, с заданным номером и ассоциированный с заданным токеном Аналитики. На вход принимает токен Аналитики __(str, до 32 символов, обязательный параметр)__, и сам токен девайса полностью.
+В ответ даёт сам токен в открытом виде.
 ###### `management/delete_token.php?username=2024genken.gf&token_start=Rs2s`
 ```
 {
-   "token":"1234567891234567",
-   "last_used":"2000-01-01 00:00:00",
-   "description":"XEON-ПК",
-   "number":1
+    "status":"success",
+    "deleted_token":"31ZWzYYMGZIkkpYo"
 }
 ```
 
 #### Полностью локальные файлы
-К ним относится файлы `db.php` из корня и `users.php` из папки `classes`, содержащие в себе инициализацию подключения к БД и объектов календаря. **Он не должен быть доступен извне ни для общей сети, ни для ЛК, а только непосредственно из ФС.**
+К ним относится файлы `db.php` из корня и `users.php` из папки `classes`, содержащие в себе инициализацию подключения к БД и объектов календаря. **Они не должны быть доступны извне ни для общей сети, ни для ЛК, а только непосредственно из ФС.**
 
-## Устройство БД
-Служба разработана на БД MySQL, содержащей одну таблицу с четырьмя столбцами:
-- `username`, `varchar(32)` - имя пользователя, который использует токен. Использование более четырёх записей в таблице с одним и тем же значением этого столбца не допускается. 
-- `token`, `char(16)` - токен, по которому можно определить имя пользователя. Каждое значение в столбце должно быть уникально. Состоит из цифр и латинских символов разного регистра, длина ровно 16 символов.
-- `refreshed`, `timestamp` - временная метка последнего запроса по токену, ограничивающая частоту запросов. По умолчанию при создании новой записи устанавливается в `2000-01-01 00:00:00`
-- `description`, `tinytext` - описание устройства, на котором используется метка, задаётся пользователем в интерфейсе ЛК, может быть пустым, но не более 255 символов.
-- `number`, `tinyint unsigned` - номер токена у пользователя (у каждого пользователя этот отсчёт ведётся отдельно).
-
+## БД
 Для быстрого создания таблицы используется следующая SQL-запись:
 ```
-create table cal
+create table analytics_data
 (
-	username varchar(32) null comment 'Username',
-	token char(16) null comment 'User''s token',
-	refreshed timestamp default '2000-01-01 00:00:00' null comment 'Last refresh',
-	description tinytext null comment 'Description of the device that uses this token',
-	number tinyint unsigned null comment 'Number of the user''s token',
-	constraint cal_token_uindex
-		unique (token)
+	analytics_token char(32) not null comment 'A token used to identify a user in Analytics'
+		primary key,
+	lessons_cache text null comment 'Cached JSON data received from Analytics',
+	cache_timestamp timestamp default '2020-01-01 00:00:00' not null comment 'A timestamp when the lessons were cached'
 )
-comment 'Main iCal Service table';
+comment 'Table that keeps analytics tokens and cache received from Analytics';
+
+create table device_tokens
+(
+	analytics_token char(32) not null comment 'Token used to access timetable from Analytics',
+	device_token char(16) not null comment 'Token used by device to access the timetable',
+	last_used timestamp default '2020-01-01 00:00:00' not null comment 'Timestamp when token was last used',
+	description tinytext null comment 'Description of the device that uses the token',
+	constraint device_tokens_analytics_token_device_token_uindex
+		unique (analytics_token, device_token),
+	constraint device_tokens_analytics_data_analytics_token_fk
+		foreign key (analytics_token) references analytics_data (analytics_token)
+			on update cascade on delete cascade
+)
+comment 'A table for user''s device tokens to contact between service and client';
 ```
 
 ## Синтаксис iCal
