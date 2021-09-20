@@ -50,7 +50,7 @@ class User extends Calendar {
 		", 's', [$this->token_used], $fetch_row = True);
 
 		# Если нет времени последнего пользования, прерываем операцию
-		if ($last_used_response !== false) {
+		if ($last_used_response) {
 			$this->tokens[$this->token_used]['last_used'] = $last_used_response['last_used'];
 		}
 		else { RAISE('Failed to get token last usage time'); }

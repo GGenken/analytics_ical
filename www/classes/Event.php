@@ -51,7 +51,8 @@ class Event extends Alarm {
 			'DESCRIPTION:'.$this->description,
 			'DTSTART;TZID='.$this->tzid.':'.$this->dtstart,
 			'DTEND;TZID='.$this->tzid.':'.$this->dtend,
-			'SUMMARY:'.$this->summary
+			'SUMMARY:'.$this->summary,
+			'END:VEVENT'
 		];
 		array_merge($lines, parent::out());
 		return $lines;

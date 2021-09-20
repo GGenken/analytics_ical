@@ -1,100 +1,147 @@
-# Letovo Analytics Calendar Maker [OOP]
-#### Микро-служба, позволяющая интегрировать расписание из ЛК в формат iCal
+# Letovo Analytics Calendar Maker
+## Служба, переводящая расписание из ЛК в формат iCal
 <hr>
 
-## Алгоритм работы
-Клиент заходит в ЛК, и в нём нажимает кнопку "Подписаться на расписание", после чего запрос направляется к ЛК.
-ЛК, в свою очередь, перенаправляет запрос на службу в `create_token.php`, которая создаёт новый токен в БД, ассоциирует его с пользователем и возвращает его. ЛК отображает ссылку на `index.php` с префиксом `webcal://` и параметром `token`, встроенными в ссылку, и в браузере пользователя будет предложено подписаться на календарь.
-После этого клиент будет с интервалом обращаться к `index.php` со своим токеном, скрипт будет обращаться к БД за именем пользователя, после чего обратится к ЛК за расписанием, переведёт его из JSON в iCal и вернёт клиенту.<br>
+## Принцип работы
+Служба является мостом между Аналитикой и клиентом, управляя токенами устройств, с помощью которых можно получить расписание через эту службу и частотой обращений по этим токенам, а также кэширует ответы Аналитики. Служба хостится как отдельный сайт третьего/четвёртого домена (`cal.site.ru`/`cal.students.site.ru`).
+<br>
 
-## Структура
-Служба хостится как отдельный сайт третьего/четвёртого домена (`cal.site.ru`/`cal.students.site.ru`). Содержит в себе три типа файлов - открытые, закрытые и полностью локальные.
+## Функционал
+Служба выполняет две функции - клиентская (ответ на запрос расписания) и административная (создание/просмотр/удаление токенов).
 
-#### Открытые файлы
-К открытым относится `index.php` в папке `c`, к которому обращается клиент для обновления информации. Скрипт делает запрос к ЛК, который в ответ на имя пользователя даёт расписание в формате JSON.
-В скрипте ограничена частота обращений для каждого пользователя в ЛК. В качестве входных данных требует лишь токен, с которым у него есть ассоциация в БД с именем пользователя.
-В ответ даёт интерпретацию полученного JSON в формате календаря iCal.
+## Файлы
+Файлы управления токенами (директория `management`) - осуществляют административное взаимодействие.
+**К ним должен иметь доступ только ЛК, выступая как интерфейс для пользователя.**
+Файл клиента (директория `client`) - взаимодействует с клиентом.
 
-#### Закрытые файлы
-Файлы управления токенами (директория `management`) - `create_token.php`, `check_tokens.php` и `delete_token.php` - создающий токен, возвращающий токены пользователя и удаляющий токены соответственно.
-**К ним должен иметь доступ только ЛК, выступая как интерфейс для пользователя и прокси**
-##### `create_token.php`
-Создаёт 16-символьный токен из цифр и латинских символов разного регистра в БД и ассоциирует его с именем пользователя и описанием. На вход принимает имя пользователя __(str, до 32 символов, обязательный параметр)__ и описание для идентификации устройства, на котором будет использоваться токен __(str, до 255 символов, опциональный параметр)__.
-Возвращает JSON со сгенерированным токеном, ассоциированным в БД с заданным пользователем. В случае, если с именем пользователя ассоциировано 4 и более токенов, в операции будет отказано.
-###### `management/create_token.php?analytics_token=31ZWzYYMGZIkkpYo31ZWzYYMGZIkkpYo&description=Андроид
+
+
+
+### `/www/management/`
+
+
+#### `new_user.php`
+Регистрирует новый токен Аналитики, к которому можно будет привязать токены устройств. На вход принимает только токен Аналитики.
+
+##### `new_user.php?analytics_token=AAjq5IDTMD3lfrorRQiUous8MhxeOI4M`
 ```
 {
-   "status":"success",
-   "token":"6VC3Nrpl2i0MnTnD"
+    "status": "success",
+    "registered_token": "AAjq5IDTMD3lfrorRQiUous8MhxeOI4M"
 }
 ```
 
-##### `check_tokens.php`
-Возвращает список токенов, ассоциированных с заданным именем пользователя. Выводит описания, токены в открытом виде и время последнего обращения по этим токенам.
-###### `management/check_tokens.php?analytics_token=31ZWzYYMGZIkkpYo31ZWzYYMGZIkkpYo
+
+#### `create_token.php`
+Создаёт токен в БД и ассоциирует его с токеном Аналитики и описанием. На вход принимает имя пользователя и описание устройства.
+Возвращает JSON со сгенерированным токеном, ассоциированным в БД с заданным токеном Аналитики. В случае, если с именем пользователя ассоциировано 10 и более токенов, в операции будет отказано.
+
+##### `create_token.php?analytics_token=AAjq5IDTMD3lfrorRQiUous8MhxeOI4M&description=Ноутбук`
 ```
 {
-   "tokens":[
-      "31ZWzYYMGZIkkpYo",
-      "5nqs9mWiX0XIPgfA",
-      "DZEc2LmYyAZs4Ayk",
-      "SD0eF6WCn73rF1aW"
-   ],
-   "descriptions":[
-      "Андроид",
-      "",
-      "",
-      ""
-   ],
-   "usages":[
-      "2021-05-12 00:46:31",
-      "2020-01-01 00:00:00",
-      "2020-01-01 00:00:00",
-      "2020-01-01 00:00:00"
-   ]
+    "status": "success",
+    "token": "glADp6VrSTY7Yg3a"
 }
 ```
 
-##### `delete_token.php`
-Удаляет токен из БД, с заданным номером и ассоциированный с заданным токеном Аналитики. На вход принимает токен Аналитики __(str, до 32 символов, обязательный параметр)__, и сам токен девайса полностью.
-В ответ даёт сам токен в открытом виде.
-###### `management/delete_token.php?username=2024genken.gf&token_start=Rs2s`
+
+#### `check_tokens.php`
+Возвращает список токенов, ассоциированных с заданным именем пользователя. Выводит описания, токены в открытом виде и время последнего обращения по ним вместе с соответствующим токеном Аналитики.
+
+###### `check_tokens.php?analytics_token=31ZWzYYMGZIkkpYo31ZWzYYMGZIkkpYo`
 ```
 {
-    "status":"success",
-    "deleted_token":"31ZWzYYMGZIkkpYo"
+    "status": "success",
+    "tokens": {
+        "eSzMCsalbRERQqxC": {
+            "description": "iPhone 8",
+            "last_used": "1980-01-01 00:00:00"
+        },
+        "glADp6VrSTY7Yg3a": {
+            "description": "Ноутбук",
+            "last_used": "1980-01-01 00:00:00"
+        },
+        "YM2SzT5dfLyZkF8h": {
+            "description": "Smart Watch",
+            "last_used": "1980-01-01 00:00:00"
+        }
+    },
+    "owner": "AAjq5IDTMD3lfrorRQiUous8MhxeOI4M"
 }
 ```
 
-#### Полностью локальные файлы
-К ним относится файлы `db.php` из корня и `users.php` из папки `classes`, содержащие в себе инициализацию подключения к БД и объектов календаря. **Они не должны быть доступны извне ни для общей сети, ни для ЛК, а только непосредственно из ФС.**
+
+#### `delete_token.php`
+Удаляет заданный токен устройства, привязанный к заданному токену Аналитики.
+В ответ даёт удалённый токен в открытом виде.
+
+###### `delete_token.php?analytics_token=AAjq5IDTMD3lfrorRQiUous8MhxeOI4M&token=eSzMCsalbRERQqxC`
+```
+{
+    "status": "success",
+    "deleted_token": "eSzMCsalbRERQqxC"
+}
+```
+
+
+
+### `/client/`
+#### `index.php`
+Возвращает расписание, полученное от Аналитики или из кэша в формате iCal. На вход принимает токен устройства.
+
+#####`index.php?token=glADp6VrSTY7Yg3a`
+```
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Letovo School/SelfGovernment/Genken//Analytics iCal Timetable Maker v2.0//RU
+CREATED:20210920T182355
+X-WR-CALNAME:Школьное расписание
+NAME:Школьное расписание
+CALSCALE:GREGORIAN
+REFRESH-INTERVAL;VALUE=DURATION:P10M
+BEGIN:VEVENT
+UID:b3a5aec9306c839df83d77f8ad56bba0@student.letovo.ru
+URL:https://letovo.zoom.us/j/96619520927
+LOCATION:209
+DESCRIPTION:Прочитать Евгения Онегина
+DTSTART;TZID=Europe/Moscow:20210504T124000
+DTEND;TZID=Europe/Moscow:20210504T132000
+SUMMARY:Русский язык, RUS-8-1
+END:VEVENT
+END:VCALENDAR
+```
+
+<hr>
+
 
 ## БД
 Для быстрого создания таблицы используется следующая SQL-запись:
 ```
-create table analytics_data
+create table if not exists analytics_data
 (
-	analytics_token char(32) not null comment 'A token used to identify a user in Analytics'
-		primary key,
-	lessons_cache text null comment 'Cached JSON data received from Analytics',
-	cache_timestamp timestamp default '2020-01-01 00:00:00' not null comment 'A timestamp when the lessons were cached'
+    analytics_token char(32)                                not null comment 'A token used to identify a user in Analytics'
+        primary key,
+    lessons_cache   text                                    null comment 'Cached JSON data received from Analytics',
+    cache_timestamp timestamp default '2020-01-01 00:00:00' not null comment 'A timestamp when the lessons were cached'
 )
-comment 'Table that keeps analytics tokens and cache received from Analytics';
+    comment 'Table that keeps Analytics tokens and cache received from Analytics';
 
-create table device_tokens
+create table if not exists device_tokens
 (
-	analytics_token char(32) not null comment 'Token used to access timetable from Analytics',
-	device_token char(16) not null comment 'Token used by device to access the timetable',
-	last_used timestamp default '2020-01-01 00:00:00' not null comment 'Timestamp when token was last used',
-	description tinytext null comment 'Description of the device that uses the token',
-	constraint device_tokens_analytics_token_device_token_uindex
-		unique (analytics_token, device_token),
-	constraint device_tokens_analytics_data_analytics_token_fk
-		foreign key (analytics_token) references analytics_data (analytics_token)
-			on update cascade on delete cascade
+    analytics_token char(32)                                not null comment 'Token used to access timetable from Analytics',
+    device_token    char(16)                                not null comment 'Token used by device to access the timetable',
+    last_used       timestamp default '1980-01-01 00:00:00' not null comment 'Timestamp when token was last used',
+    description     tinytext                                null comment 'Description of the device that uses the token',
+    constraint device_tokens_analytics_token_device_token_uindex
+        unique (analytics_token, device_token),
+    constraint device_tokens_analytics_data_analytics_token_fk
+        foreign key (analytics_token) references analytics_data (analytics_token)
+            on update cascade on delete cascade
 )
-comment 'A table for user''s device tokens to contact between service and client';
+    comment 'A table for user''s device tokens to contact between service and client';
 ```
+
+<hr>
 
 ## Синтаксис iCal
 ### Формат тегов
